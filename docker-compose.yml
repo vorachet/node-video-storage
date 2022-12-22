@@ -1,0 +1,72 @@
+version: "3.8"
+services:
+  api: 
+    build: ./
+    restart: always
+    container_name: api
+    depends_on:
+      - storage
+      - database
+      - queue
+    ports:
+      - "8080:8080"
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - DATABASE_USERNAME=${DATABASE_USERNAME}
+      - DATABASE_PASSWORD=${DATABASE_PASSWORD}
+      - STORAGE_ENDPOINT=${STORAGE_ENDPOINT}
+      - STORAGE_USERNAME=${STORAGE_USERNAME}
+      - STORAGE_PASSWORD=${STORAGE_PASSWORD}
+      - COOKIE_SECRET=${COOKIE_SECRET}
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - DELETE_TEMP_FILE_CRONJOB=${DELETE_TEMP_FILE_CRONJOB}
+      - JWT_EXPIRES_IN=${JWT_EXPIRES_IN}
+      - JWT_SECRET=${JWT_SECRET}
+  storage: 
+    image: minio/minio:latest
+    restart: always
+    container_name: storage
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - ./data_storage/minio:/data
+    environment:
+      - MINIO_ROOT_USER=${STORAGE_USERNAME}
+      - MINIO_ROOT_PASSWORD=${STORAGE_PASSWORD}
+    command: server --address ":9000" --console-address ":9001" /data 
+  storage_initial_tasks:
+    image: minio/mc
+    container_name: storage_initial_tasks
+    depends_on:
+      - storage
+    entrypoint: >
+      /bin/sh -c "
+      /usr/bin/mc config host add storage ${STORAGE_ENDPOINT} ${STORAGE_USERNAME} ${STORAGE_PASSWORD};
+      /usr/bin/mc mb storage/files;
+      /usr/bin/mc policy set public storage/files;
+      exit 0;
+      "
+  ## Queue system
+  ## Client test on host machine: redis-cli -a ${REDIS_PASSWORD} -p 6379
+  queue:
+    image: 'bitnami/redis:latest'
+    container_name: queue
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - REDIS_PORT_NUMBER=6379
+    ports:
+      - '6379:6379'
+  database:
+    image: mongo:latest
+    restart: always
+    container_name: database
+    ports:
+      - "27017:27017"
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=${DATABASE_USERNAME}
+      - MONGO_INITDB_ROOT_PASSWORD=${DATABASE_PASSWORD}
+    volumes:
+      - ./data_database/mongo-data:/data/db
+      - ./data_database/mongo-config:/data/configdb

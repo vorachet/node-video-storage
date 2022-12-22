@@ -1,0 +1,47 @@
+version: "3.8"
+services:
+  storage: 
+    image: minio/minio:latest
+    restart: always
+    container_name: storage
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - ./data_storage/minio:/data
+    environment:
+      - MINIO_ROOT_USER=${STORAGE_USERNAME}
+      - MINIO_ROOT_PASSWORD=${STORAGE_PASSWORD}
+    command: server --address ":9000" --console-address ":9001" /data 
+  storage_initial_tasks:
+    image: minio/mc
+    depends_on:
+      - storage
+    entrypoint: >
+      /bin/sh -c "
+      /usr/bin/mc config host add storage ${STORAGE_ENDPOINT} ${STORAGE_USERNAME} ${STORAGE_PASSWORD};
+      /usr/bin/mc mb storage/videos;
+      /usr/bin/mc policy set public storage/videos;
+      exit 0;
+      "
+  ## Queue system
+  ## Client test on host machine: redis-cli -a ${REDIS_PASSWORD} -p 6379
+  redis:
+    image: 'bitnami/redis:latest'
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - REDIS_PORT_NUMBER=6379
+    ports:
+      - '6379:6379'
+  database:
+    image: mongo:latest
+    restart: always
+    container_name: database
+    ports:
+      - "27017:27017"
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=${DATABASE_USERNAME}
+      - MONGO_INITDB_ROOT_PASSWORD=${DATABASE_PASSWORD}
+    volumes:
+      - ./data_database/mongo-data:/data/db
+      - ./data_database/mongo-config:/data/configdb
